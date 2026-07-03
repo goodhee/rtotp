@@ -1,0 +1,6 @@
+/target
+*.orig
+.DS_Store
+
+# OMC state
+.omc/
