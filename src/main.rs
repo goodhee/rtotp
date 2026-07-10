@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
+use qrcode::{render::unicode, QrCode};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{self, Write};
@@ -29,6 +30,8 @@ struct Cli {
 enum Command {
     /// Show the current 6-digit code for entry <index> (see `list`)
     Code { index: usize },
+    /// Show a terminal QR code for adding an entry to an authenticator app
+    Qr { index: usize },
     /// Add a new OTP secret
     Add,
     /// List registered secrets
@@ -76,6 +79,34 @@ fn totp_for(secret: &str) -> Result<TOTP> {
     TOTP::new(Algorithm::SHA1, 6, 1, 30, bytes).context("failed to build TOTP")
 }
 
+fn percent_encode(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
+}
+
+fn otpauth_uri(otp: &Otp) -> String {
+    let issuer = percent_encode(&otp.issuer);
+    let account_name = percent_encode(&otp.account_name);
+    let secret = percent_encode(otp.secret.trim());
+
+    format!(
+        "otpauth://totp/{issuer}:{account_name}?secret={secret}&issuer={issuer}&algorithm=SHA1&digits=6&period=30"
+    )
+}
+
+fn otp_at(list: &[Otp], index: usize) -> Result<&Otp> {
+    let pos = index.checked_sub(1).context("index starts at 1")?;
+    list.get(pos)
+        .with_context(|| format!("no entry #{index} (see `rtotp list`)"))
+}
+
 fn prompt(label: &str) -> Result<String> {
     print!("{label}");
     io::stdout().flush()?;
@@ -100,11 +131,21 @@ fn main() -> Result<()> {
     match Cli::parse_from(args).command {
         Command::Code { index } => {
             let list = load()?;
-            let pos = index.checked_sub(1).context("index starts at 1")?;
-            let otp = list
-                .get(pos)
-                .with_context(|| format!("no entry #{index} (see `rtotp list`)"))?;
+            let otp = otp_at(&list, index)?;
             println!("{}", totp_for(&otp.secret)?.generate_current()?);
+        }
+        Command::Qr { index } => {
+            let list = load()?;
+            let otp = otp_at(&list, index)?;
+            let uri = otpauth_uri(otp);
+            let code = QrCode::new(uri.as_bytes()).context("failed to build QR code")?;
+            println!(
+                "{}",
+                code.render::<unicode::Dense1x2>()
+                    .dark_color(unicode::Dense1x2::Dark)
+                    .light_color(unicode::Dense1x2::Light)
+                    .build()
+            );
         }
         Command::Add => {
             let issuer = prompt("Step 1/3) Issuer: ")?;
