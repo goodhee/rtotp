@@ -12,14 +12,21 @@ be imported into Google Authenticator or another authenticator app.
 
 ## Install
 
-Download a prebuilt binary from the [releases page](https://github.com/goodhee/rtotp/releases),
-or build from source:
+Download the latest prebuilt binary:
 
 ```sh
-cargo install --git https://github.com/goodhee/rtotp
-# or, from a checkout:
-cargo build --release   # -> target/release/rtotp
+tag=$(curl -fsSL https://api.github.com/repos/goodhee/rtotp/releases/latest | sed -n 's/.*"tag_name": "\(.*\)".*/\1/p') && target="$(uname -m)-$(uname -s)" && case "$target" in arm64-Darwin) target=aarch64-apple-darwin ;; x86_64-Darwin) target=x86_64-apple-darwin ;; x86_64-Linux) target=x86_64-unknown-linux-gnu ;; aarch64-Linux|arm64-Linux) target=aarch64-unknown-linux-gnu ;; *) echo "unsupported target: $target" >&2; exit 1 ;; esac && curl -fsSL "https://github.com/goodhee/rtotp/releases/download/$tag/rtotp-$tag-$target.tar.gz" | tar xz && sudo install -m 0755 rtotp /usr/local/bin/rtotp
 ```
+
+Windows binaries are attached to each [GitHub release](https://github.com/goodhee/rtotp/releases).
+
+If you have Rust installed:
+
+```sh
+cargo install rtotp
+```
+
+Homebrew is not published yet. For now, use the prebuilt release binary or Cargo.
 
 ## Usage
 
